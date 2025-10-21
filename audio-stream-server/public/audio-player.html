@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Audio Player</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #ff7e5f 0%, #feb47b 100%);
+            color: #333;
+        }
+        .player-container {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            text-align: center;
+        }
+        audio {
+            width: 100%;
+            margin: 20px 0;
+        }
+        .controls button {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 5px;
+            background: #4CAF50;
+            color: white;
+            cursor: pointer;
+        }
+        .stream-controls button {
+            background: #2196F3;
+        }
+        .ws-status {
+            margin: 20px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .connected { background: #d4edda; color: #155724; }
+        .disconnected { background: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <div class="player-container">
+        <h1>🎧 Web Audio Player</h1>
+        <p>Stream audio from Android devices or play local files</p>
+        
+        <div class="ws-status disconnected" id="wsStatus">
+            WebSocket: Disconnected
+        </div>
+        
+        <audio id="audioPlayer" controls>
+            Your browser does not support the audio element.
+        </audio>
+        
+        <div class="controls">
+            <button onclick="loadSampleAudio()">Load Sample Audio</button>
+            <button onclick="startStreaming()">Start Streaming</button>
+            <button onclick="stopStreaming()">Stop Streaming</button>
+        </div>
+        
+        <div class="stream-controls">
+            <h3>Mobile Stream</h3>
+            <button onclick="simulateAndroidStream()">Simulate Android Stream</button>
+            <button onclick="simulateiPhoneListener()">Simulate iPhone Listener</button>
+        </div>
+        
+        <div id="messages" style="margin-top: 20px; text-align: left; height: 200px; overflow-y: auto; border: 1px solid #ccc; padding: 10px;"></div>
+        
+        <p style="margin-top: 30px;">
+            <a href="/">← Back to Home</a>
+        </p>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        let ws = null;
+        const wsStatus = document.getElementById('wsStatus');
+        const messagesDiv = document.getElementById('messages');
+        const audioPlayer = document.getElementById('audioPlayer');
+        
+        function connectWebSocket() {
+            ws = io();
+            
+            ws.on('connect', function() {
+                wsStatus.className = 'ws-status connected';
+                wsStatus.innerHTML = 'WebSocket: Connected ✅';
+                addMessage('Connected to audio stream server');
+            });
+            
+            ws.on('audio_stream', function(data) {
+                addMessage(`📱 Mobile Audio: ${data.deviceId} - ${data.chunkSize} bytes`);
+                // Here you can process the audio data for playback
+            });
+            
+            ws.on('web_audio_stream', function(data) {
+                addMessage('🌐 Web audio stream received');
+                // Process web audio stream
+            });
+            
+            ws.on('disconnect', function() {
+                wsStatus.className = 'ws-status disconnected';
+                wsStatus.innerHTML = 'WebSocket: Disconnected ❌';
+                addMessage('Disconnected from server');
+            });
+        }
+        
+        function loadSampleAudio() {
+            audioPlayer.src = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
+            audioPlayer.load();
+            addMessage('Loaded sample audio');
+        }
+        
+        function startStreaming() {
+            addMessage('Starting audio streaming...');
+            // Implement audio capture and streaming
+        }
+        
+        function stopStreaming() {
+            addMessage('Stopping audio streaming...');
+        }
+        
+        function simulateAndroidStream() {
+            if (!ws || !ws.connected) {
+                addMessage('Not connected to server');
+                return;
+            }
+            
+            ws.emit('register_android', {
+                deviceId: 'web-android-' + Date.now(),
+                deviceName: 'Web Android Simulator'
+            });
+            
+            // Simulate audio stream
+            setInterval(() => {
+                ws.emit('audio_stream', {
+                    audioData: 'simulated_audio_data_' + Math.random(),
+                    deviceId: 'web-android-sim',
+                    timestamp: new Date().toISOString(),
+                    chunkSize: 1024
+                });
+            }, 3000);
+            
+            addMessage('📱 Android simulator started');
+        }
+        
+        function simulateiPhoneListener() {
+            if (!ws || !ws.connected) {
+                addMessage('Not connected to server');
+                return;
+            }
+            
+            ws.emit('register_iphone', {
+                userId: 'web-iphone-' + Date.now()
+            });
+            
+            addMessage('📱 iPhone listener simulator started');
+        }
+        
+        function addMessage(message) {
+            const messageElement = document.createElement('div');
+            messageElement.textContent = '[' + new Date().toLocaleTimeString() + '] ' + message;
+            messagesDiv.appendChild(messageElement);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+        
+        // Auto-connect on page load
+        window.onload = connectWebSocket;
+    </script>
+</body>
+</html>

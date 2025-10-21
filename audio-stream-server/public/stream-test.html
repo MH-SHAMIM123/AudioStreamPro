@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Stream Test</title>
+    <style>
+        body { font-family: Arial; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .panel { padding: 20px; margin: 10px 0; border: 1px solid #ccc; }
+        .android { background: #e8f5e8; }
+        .iphone { background: #e8f0f8; }
+        button { padding: 10px; margin: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📡 Stream Test Page</h1>
+        <a href="/">← Back to Home</a>
+        
+        <div class="panel android">
+            <h2>📱 Android Stream Simulator</h2>
+            <button onclick="registerAndroid()">Register as Android</button>
+            <button onclick="startAudioStream()">Start Audio Stream</button>
+            <button onclick="stopAudioStream()">Stop Audio Stream</button>
+        </div>
+        
+        <div class="panel iphone">
+            <h2>📱 iPhone Listener Simulator</h2>
+            <button onclick="registeriPhone()">Register as iPhone</button>
+            <div id="iphoneMessages"></div>
+        </div>
+        
+        <div id="status">Status: Not connected</div>
+        <div id="messages" style="height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; margin-top: 20px;"></div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const statusDiv = document.getElementById('status');
+        const messagesDiv = document.getElementById('messages');
+        const iphoneMessagesDiv = document.getElementById('iphoneMessages');
+        
+        let streamInterval;
+        
+        socket.on('connect', () => {
+            statusDiv.textContent = 'Status: Connected ✅';
+            addMessage('Connected to server');
+        });
+        
+        socket.on('audio_stream', (data) => {
+            iphoneMessagesDiv.innerHTML = `
+                <p>📨 Received audio from: ${data.deviceId}</p>
+                <p>Size: ${data.chunkSize} bytes</p>
+                <p>Time: ${new Date(data.timestamp).toLocaleTimeString()}</p>
+            `;
+        });
+        
+        function registerAndroid() {
+            socket.emit('register_android', {
+                deviceId: 'test-android-001',
+                deviceName: 'Test Android Device'
+            });
+            addMessage('📱 Registered as Android device');
+        }
+        
+        function registeriPhone() {
+            socket.emit('register_iphone', {
+                userId: 'test-iphone-001'
+            });
+            addMessage('📱 Registered as iPhone listener');
+        }
+        
+        function startAudioStream() {
+            streamInterval = setInterval(() => {
+                socket.emit('audio_stream', {
+                    audioData: Array(1024).fill(0).map(() => Math.random().toString(36).charAt(2)).join(''),
+                    deviceId: 'test-android-001',
+                    timestamp: new Date().toISOString(),
+                    chunkSize: 1024
+                });
+                addMessage('🎵 Sent audio chunk (1024 bytes)');
+            }, 2000);
+            addMessage('🎵 Started audio streaming');
+        }
+        
+        function stopAudioStream() {
+            if (streamInterval) {
+                clearInterval(streamInterval);
+                addMessage('🛑 Stopped audio streaming');
+            }
+        }
+        
+        function addMessage(message) {
+            const messageElement = document.createElement('div');
+            messageElement.textContent = '[' + new Date().toLocaleTimeString() + '] ' + message;
+            messagesDiv.appendChild(messageElement);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+    </script>
+</body>
+</html>
