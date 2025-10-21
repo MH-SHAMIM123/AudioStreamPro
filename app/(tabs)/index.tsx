@@ -1,98 +1,260 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+// app/(tabs)/index.tsx - এই সম্পূর্ণ corrected code টি copy-paste করুন
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, Button, StyleSheet, Text, View } from 'react-native';
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+  const [isRecording, setIsRecording] = useState(false);
+  const [recording, setRecording] = useState<any>(null);
+  const [status, setStatus] = useState('Ready to start');
+  const [isLoading, setIsLoading] = useState(false);
+  const recordingRef = useRef<any>(null);
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+  useEffect(() => {
+    return () => {
+      if (recording) {
+        recording.stopAndUnloadAsync();
+      }
+    };
+  }, []);
+
+  const requestPermissions = async () => {
+    try {
+      const { status } = await Audio.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permission Required',
+          'This app needs microphone access to function properly.',
+          [{ text: 'OK' }]
+        );
+        return false;
+      }
+      return true;
+    } catch (error) {
+      console.log('Permission error:', error);
+      return false;
+    }
+  };
+
+  const startRecording = async () => {
+    try {
+      setIsLoading(true);
+      setStatus('Requesting permissions...');
+
+      const hasPermission = await requestPermissions();
+      if (!hasPermission) {
+        setIsLoading(false);
+        return;
+      }
+
+      setStatus('Configuring audio...');
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: true,
+      });
+
+      setStatus('Starting recording...');
+
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+      
+      recordingRef.current = recording;
+      setRecording(recording);
+      setIsRecording(true);
+      setIsLoading(false);
+      setStatus('🎤 Recording... (Keep app open)');
+
+      setTimeout(() => {
+        processRecording();
+      }, 10000);
+
+    } catch (error) {
+      console.error('Recording start failed:', error);
+      setIsLoading(false);
+      setStatus('Failed to start');
+      Alert.alert(
+        'Recording Error',
+        'Could not start audio recording. Please try again.',
+        [{ text: 'OK' }]
+      );
+    }
+  };
+
+  const processRecording = async () => {
+    if (!recordingRef.current || !isRecording) return;
+
+    try {
+      setStatus('Processing audio...');
+      
+      await recordingRef.current.stopAndUnloadAsync();
+      const uri = recordingRef.current.getURI();
+      
+      if (uri) {
+        const audioData = await FileSystem.readAsStringAsync(uri, {
+          encoding: 'base64' as any, // FIXED LINE
+        });
+        
+        console.log('📱 iPhone Audio Chunk:', audioData.length, 'bytes');
+        await FileSystem.deleteAsync(uri);
+      }
+
+      if (isRecording) {
+        setStatus('🎤 Recording...');
+        await startRecording();
+      }
+      
+    } catch (error) {
+      console.log('Processing error:', error);
+      if (isRecording) {
+        setStatus('Error - Retrying...');
+        setTimeout(() => startRecording(), 2000);
+      }
+    }
+  };
+
+  const stopRecording = async () => {
+    try {
+      setIsRecording(false);
+      setStatus('Stopping...');
+
+      if (recordingRef.current) {
+        await recordingRef.current.stopAndUnloadAsync();
+        recordingRef.current = null;
+      }
+
+      setRecording(null);
+      setStatus('⏹️ Recording Stopped');
+      
+    } catch (error) {
+      console.log('Stop recording error:', error);
+      setStatus('Stopped with error');
+    }
+  };
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>🎤 AudioStream Pro</Text>
+      <Text style={styles.subtitle}>iPhone Version 📱</Text>
+      
+      <View style={styles.statusContainer}>
+        <Text style={styles.status}>{status}</Text>
+        {isLoading && <ActivityIndicator size="small" color="#0000ff" />}
+      </View>
+
+      <View style={styles.buttonContainer}>
+        <Button
+          title={isLoading ? "INITIALIZING..." : "START STREAMING"}
+          onPress={startRecording}
+          disabled={isRecording || isLoading}
+          color="#007AFF"
+        />
+        <Button
+          title="STOP STREAMING"
+          onPress={stopRecording}
+          disabled={!isRecording}
+          color="#FF3B30"
+        />
+      </View>
+
+      <View style={styles.featureBox}>
+        <Text style={styles.featureTitle}>iPhone Features:</Text>
+        <Text style={styles.featureItem}>✅ High Quality Audio</Text>
+        <Text style={styles.featureItem}>✅ Background Processing</Text>
+        <Text style={styles.featureItem}>⚠️ Keep App Open</Text>
+        <Text style={styles.featureItem}>📡 Ready for Server</Text>
+      </View>
+
+      <View style={styles.instructions}>
+        <Text style={styles.instructionsTitle}>Testing Instructions:</Text>
+        <Text style={styles.instruction}>1. Start Recording - কথা বলুন</Text>
+        <Text style={styles.instruction}>2. Check console logs</Text>
+        <Text style={styles.instruction}>3. App open রাখুন</Text>
+        <Text style={styles.instruction}>4. Stop when done</Text>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#f8f9fa',
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    marginBottom: 5,
+    color: '#1c1c1e',
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#8e8e93',
+    marginBottom: 30,
+  },
+  statusContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    marginBottom: 30,
   },
-  stepContainer: {
-    gap: 8,
+  status: {
+    fontSize: 18,
+    color: '#1c1c1e',
+    fontWeight: '600',
+    marginRight: 10,
+  },
+  buttonContainer: {
+    gap: 15,
+    width: '80%',
+    marginBottom: 30,
+  },
+  featureBox: {
+    backgroundColor: 'white',
+    padding: 20,
+    borderRadius: 12,
+    width: '100%',
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  featureTitle: {
+    fontWeight: 'bold',
+    fontSize: 18,
+    marginBottom: 10,
+    color: '#1c1c1e',
+  },
+  featureItem: {
+    fontSize: 14,
+    marginBottom: 5,
+    color: '#48484a',
+  },
+  instructions: {
+    backgroundColor: '#e3f2fd',
+    padding: 15,
+    borderRadius: 10,
+    width: '100%',
+    borderLeftWidth: 4,
+    borderLeftColor: '#2196F3',
+  },
+  instructionsTitle: {
+    fontWeight: 'bold',
     marginBottom: 8,
+    color: '#1976d2',
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  instruction: {
+    fontSize: 12,
+    marginBottom: 3,
+    color: '#424242',
   },
 });
